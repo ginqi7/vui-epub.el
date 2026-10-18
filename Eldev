@@ -1,0 +1,10 @@
+; -*- mode: emacs-lisp; lexical-binding: t -*-
+
+;; Uncomment some calls below as needed for your project.
+;(eldev-use-package-archive 'gnu-elpa)
+;(eldev-use-package-archive 'nongnu-elpa)
+;(eldev-use-package-archive 'melpa)
+(eldev-use-vc-repository 'vui :github "d12frosted/vui.el")
+(eldev-use-vc-repository 'ekp :github "Kinneyzhang/emacs-kp")
+(eldev-use-vc-repository 'vui+ :github "ginqi7/vui-plus.el")
+(eldev-use-vc-repository 'vui+ :github "ginqi7/vui-html.el")
