@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026  Qiqi Jin
 
 ;; Author: Qiqi Jin <ginqi7@gmail.com>
-;; Keywords: 
+;; Keywords:
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 
 ;;; Commentary:
 
-;; 
+;;
 
 ;;; Code:
 
@@ -457,6 +457,32 @@ This function honors `shr-max-image-proportion' if possible."
     (setq-local vui-epub-source-buffer (current-buffer)))
   (run-hooks 'vui-epub-post-html-render-hook))
 
+(defun vui-epub--keep-unmodified (&rest _)
+  "Clear the buffer's modified flag after it changes.
+The buffer holds a rendered view of the EPUB rather than the
+archive's contents, so it should never be considered modified."
+  (set-buffer-modified-p nil))
+
+(defun vui-epub--after-rerender (instance)
+  "Clear the modified flag after vui re-renders INSTANCE's buffer.
+Re-renders run with `inhibit-modification-hooks', so
+`after-change-functions' cannot keep the flag clear."
+  (let ((buffer (vui-instance-buffer instance)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (when (derived-mode-p 'vui-epub-mode)
+          (set-buffer-modified-p nil))))))
+
+(defun vui-epub--confirm-kill ()
+  "Allow killing the buffer without asking whether to save it.
+The buffer is a view of the EPUB, not a file that can be saved, so
+a lingering modified flag should not get in the way."
+  (set-buffer-modified-p nil)
+  t)
+
+(unless (advice-member-p #'vui-epub--after-rerender 'vui--rerender-buffer)
+  (advice-add 'vui--rerender-buffer :after #'vui-epub--after-rerender))
+
 (defun vui-epub-render-document ()
   "Render the document referenced by `vui-epub-documents-index'.
 If the document path refers to an image (as determined by
@@ -564,7 +590,7 @@ the HTML is rendered with `vui-epub-render-html-function'."
 Takes an optional COUNT, goes backward if COUNT is negative."
   (interactive "p")
   (vui-epub-goto-document (min (1- (length vui-epub-documents))
-                          (+ vui-epub-documents-index (or count 1)))))
+                           (+ vui-epub-documents-index (or count 1)))))
 
 (defun vui-epub-previous-document (&optional count)
   "Go to the previous document and render it.
@@ -806,7 +832,21 @@ live in the same buffer."
     (setq vui-epub-documents (apply 'vector (vui-epub-content-files work-dir content)))
     (setq vui-epub-documents-index 0))
   (setq buffer-undo-list t)
-  (setq vui-epub-file-name (buffer-file-name)) ; kept for compatibility reasons
+  (setq vui-epub-file-name (buffer-file-name))
+  ;; The buffer displays rendered HTML, not the archive's bytes, so
+  ;; detach it from the EPUB file: saving the buffer must never
+  ;; overwrite the EPUB.  `vui-epub-file-name' keeps the real path for
+  ;; bookmarks, Org links, recentf and `vui-epub-reopen-as-archive'.
+  (setq buffer-file-name nil)
+  (setq buffer-file-truename nil)
+  (setq buffer-file-number nil)
+  (setq buffer-auto-save-file-name nil)
+  ;; Re-renders mutate the buffer without going through
+  ;; `vui-epub-render-document', so clear the modified flag whenever
+  ;; the contents change instead of only after a full render.
+  (add-hook 'after-change-functions #'vui-epub--keep-unmodified nil t)
+  (add-hook 'kill-buffer-query-functions #'vui-epub--confirm-kill nil t)
+  (set-buffer-modified-p nil)
   (setq-local bookmark-make-record-function
               'vui-epub-bookmark-make-record)
   (let ((place (vui-epub-saved-place (cdr (assq 'identifier vui-epub-metadata)))))
